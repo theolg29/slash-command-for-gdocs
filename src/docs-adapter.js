@@ -48,12 +48,42 @@
 
   function findVisibleMenuItem(doc, labels) {
     const wanted = labels.map(normalize);
-    const candidates = Array.from(doc.querySelectorAll('[role="menuitem"], .goog-menuitem'));
+    const candidates = Array.from(doc.querySelectorAll(
+      '[role="menuitem"], [role="menuitemradio"], [role="option"], .goog-menuitem, .goog-option'
+    ));
     return candidates.find((candidate) => {
       if (!visible(candidate)) return false;
-      const text = normalizedText(candidate);
+      const text = normalizedText(candidate) || normalize(candidate.getAttribute("aria-label") || "");
       return wanted.some((label) => text === label || text.startsWith(`${label} `));
     });
+  }
+
+  function findVisibleStyleItem(doc, labels) {
+    const direct = findVisibleMenuItem(doc, labels);
+    if (direct) return direct;
+
+    const wanted = labels.map(normalize);
+    const containers = Array.from(doc.querySelectorAll(
+      '[role="menu"], [role="listbox"], .goog-menu, .goog-menu-vertical'
+    )).filter(visible);
+
+    for (const container of containers) {
+      const descendants = Array.from(container.querySelectorAll("div, span"));
+      const matchingLeaf = descendants
+        .filter(visible)
+        .filter((element) => {
+          const text = normalizedText(element) || normalize(element.getAttribute("aria-label") || "");
+          return wanted.some((label) => text === label || text.startsWith(`${label} `));
+        })
+        .sort((a, b) => normalizedText(a).length - normalizedText(b).length)[0];
+
+      if (matchingLeaf) {
+        return matchingLeaf.closest(
+          '[role="menuitem"], [role="menuitemradio"], [role="option"], .goog-menuitem, .goog-option'
+        ) || matchingLeaf;
+      }
+    }
+    return null;
   }
 
   async function openInsertMenu(doc) {
@@ -96,15 +126,12 @@
     const button = doc.getElementById("headingStyleSelect") || findByAria(doc, ["styles", "styles de paragraphe", "normal text", "texte normal"]);
     if (!button) throw new Error("Le menu des styles est introuvable.");
     mouseClick(button);
-    await wait(70);
 
-    const wanted = labels.map(normalize);
-    const candidates = Array.from(doc.querySelectorAll('[role="menuitem"], .goog-menuitem'));
-    const item = candidates.find((candidate) => {
-      if (!visible(candidate)) return false;
-      const text = normalizedText(candidate);
-      return wanted.some((label) => text === label || text.startsWith(`${label} `));
-    });
+    let item = null;
+    for (let attempt = 0; attempt < 20 && !item; attempt += 1) {
+      await wait(50);
+      item = findVisibleStyleItem(doc, labels);
+    }
     if (!item) {
       mouseClick(button);
       throw new Error("Ce style n’est pas disponible dans l’interface actuelle de Docs.");
