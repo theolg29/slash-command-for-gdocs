@@ -1,0 +1,10 @@
+{
+  "name": "slash-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Commandes slash pour Google Docs",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/commands.js && node --check src/docs-adapter.js && node --check src/content.js && node --check popup.js && node --test"
+  }
+}

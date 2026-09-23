@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Slash Docs</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header><span class="logo">/</span><div><h1>Slash Docs</h1><p>Les commandes qui manquaient à Docs.</p></div></header>
+      <label class="toggle-row" for="enabled">
+        <span><strong>Activer dans Google Docs</strong><small>Tape / dans un document pour commencer.</small></span>
+        <input id="enabled" type="checkbox" checked>
+        <span class="toggle" aria-hidden="true"></span>
+      </label>
+      <section>
+        <span class="eyebrow">Mode d’emploi</span>
+        <ol><li>Tape <kbd>/</kbd></li><li>Cherche une commande</li><li>Valide avec <kbd>↵</kbd></li></ol>
+      </section>
+      <p class="privacy">Aucun contenu du document n’est collecté.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
