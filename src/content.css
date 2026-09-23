@@ -6,3 +6,8 @@
   height: 0 !important;
   pointer-events: none !important;
 }
+
+#slash-docs-root[hidden] {
+  display: none !important;
+  pointer-events: none !important;
+}

@@ -39,10 +39,15 @@
 
   document.addEventListener("pointerdown", (event) => {
     lastPointer = { x: event.clientX, y: event.clientY };
-    if (paletteOpen && !isTop) emit("close");
+    if (!paletteOpen) return;
+    if (!isTop) {
+      emit("close");
+      return;
+    }
+    if (!event.composedPath().includes(host)) closePalette();
   }, true);
 
-  document.addEventListener("keydown", (event) => {
+  window.addEventListener("keydown", (event) => {
     if (!enabled || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
 
     if (!paletteOpen) {
@@ -151,6 +156,9 @@
       positionPalette(message.point);
       render();
       host.hidden = false;
+      host.style.display = "block";
+      palette.removeAttribute("aria-hidden");
+      palette.style.pointerEvents = "auto";
       requestAnimationFrame(() => palette.classList.add("visible"));
     } else if (message.type === "query") {
       query = message.query || "";
@@ -172,7 +180,10 @@
     if (!isTop || !host) return;
     paletteOpen = false;
     palette.classList.remove("visible");
+    palette.setAttribute("aria-hidden", "true");
+    palette.style.pointerEvents = "none";
     host.hidden = true;
+    host.style.display = "none";
     sendToSource("closed");
     sourceWindow = null;
   }

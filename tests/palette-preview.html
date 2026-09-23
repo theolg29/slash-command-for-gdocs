@@ -29,6 +29,20 @@
         const editor = document.getElementById("editor");
         editor.focus();
         editor.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+        const action = new URLSearchParams(location.search).get("action");
+        if (action === "arrow") {
+          editor.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+        }
+        if (action === "close") {
+          editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+          const host = document.getElementById("slash-docs-root");
+          document.body.dataset.paletteClosed = String(host.hidden && getComputedStyle(host).display === "none");
+        }
+        if (action === "outside") {
+          editor.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+          const host = document.getElementById("slash-docs-root");
+          document.body.dataset.outsideClosed = String(host.hidden && getComputedStyle(host).display === "none");
+        }
       });
     </script>
   </body>
