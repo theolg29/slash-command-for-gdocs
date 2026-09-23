@@ -65,6 +65,7 @@
       event.stopImmediatePropagation();
       paletteOpen = false;
       emit("close");
+      insertLiteralSlash(event.target);
       return;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -76,7 +77,6 @@
     if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       event.stopImmediatePropagation();
-      paletteOpen = false;
       emit("execute");
       return;
     }
@@ -92,7 +92,7 @@
       }
       return;
     }
-    if (event.key.length === 1 && !/\s/.test(event.key)) {
+    if (event.key.length === 1) {
       event.preventDefault();
       event.stopImmediatePropagation();
       query += event.key;
@@ -102,12 +102,27 @@
 
   function isEditingTarget(target) {
     if (!(target instanceof Element)) return false;
-    if (target.closest("input, textarea, [contenteditable='true']")) return true;
-    return Boolean(
-      document.querySelector(".docs-texteventtarget-iframe") ||
-      document.querySelector(".kix-appview-editor") ||
-      document.querySelector("[class*='canvas']")
-    );
+    // The Docs editor receives typing inside its dedicated iframe.
+    if (!isTop) {
+      try { return window.frameElement?.matches(".docs-texteventtarget-iframe") === true; }
+      catch { return false; }
+    }
+    return Boolean(target.closest(".kix-appview-editor, #editor[contenteditable='true']"));
+  }
+
+  function insertLiteralSlash(target) {
+    // Docs handles paste through its editor iframe; native contenteditables
+    // (including our browser fixture) can use the browser's editing command.
+    if (isTop) {
+      document.execCommand("insertText", false, "/");
+      return;
+    }
+    const clipboard = new DataTransfer();
+    clipboard.setData("text/plain", "/");
+    clipboard.setData("text/html", "<span>/</span>");
+    target.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true, cancelable: true, clipboardData: clipboard
+    }));
   }
 
   if (!isTop) return;
@@ -135,17 +150,16 @@
   const queryValue = shadow.querySelector(".query-value");
   let filtered = SlashDocsCommands.COMMANDS;
   let adapter;
+  let openingFrame = null;
 
   function mount() {
     if (!document.documentElement.contains(host)) document.documentElement.appendChild(host);
     adapter ||= SlashDocsAdapter.createDocsAdapter(document);
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount, { once: true });
-  else mount();
-
   function handleMessage(message, source) {
     if (!enabled && message.type !== "close") return;
+    if (message.type !== "open" && message.type !== "close" && !paletteOpen) return;
     if (message.type === "open") {
       sourceWindow = source;
       paletteOpen = true;
@@ -153,13 +167,16 @@
       selectedIndex = 0;
       filtered = SlashDocsCommands.COMMANDS;
       mount();
-      positionPalette(message.point);
       render();
       host.hidden = false;
       host.style.display = "block";
       palette.removeAttribute("aria-hidden");
       palette.style.pointerEvents = "auto";
-      requestAnimationFrame(() => palette.classList.add("visible"));
+      positionPalette(message.point);
+      openingFrame = requestAnimationFrame(() => {
+        openingFrame = null;
+        if (paletteOpen && host.isConnected) palette.classList.add("visible");
+      });
     } else if (message.type === "query") {
       query = message.query || "";
       selectedIndex = 0;
@@ -177,13 +194,18 @@
   }
 
   function closePalette() {
-    if (!isTop || !host) return;
     paletteOpen = false;
+    query = "";
+    if (!isTop) return;
+    if (openingFrame !== null) cancelAnimationFrame(openingFrame);
+    openingFrame = null;
     palette.classList.remove("visible");
     palette.setAttribute("aria-hidden", "true");
     palette.style.pointerEvents = "none";
     host.hidden = true;
     host.style.display = "none";
+    host.remove();
+    results.replaceChildren();
     sendToSource("closed");
     sourceWindow = null;
   }
@@ -192,20 +214,37 @@
     const anchor = getCursorRect() || (point ? { left: point.x, bottom: point.y } : null) || { left: window.innerWidth / 2, bottom: 180 };
     const width = Math.min(340, window.innerWidth - 24);
     const left = Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12));
-    let top = anchor.bottom + 14;
-    if (top + 470 > window.innerHeight) top = Math.max(12, anchor.bottom - 470);
+    let top = anchor.bottom + 6;
+    let room = window.innerHeight - top - 12;
+    // Prefer a shorter, scrollable list directly below the insertion point.
+    if (room < 100) {
+      room = Math.min(460, (anchor.top ?? anchor.bottom) - 18);
+      top = Math.max(12, (anchor.top ?? anchor.bottom) - room - 6);
+    }
+    results.style.maxHeight = `${Math.max(40, Math.min(408, room - 62))}px`;
     host.style.setProperty("--slash-left", `${left}px`);
     host.style.setProperty("--slash-top", `${top}px`);
     host.style.setProperty("--slash-width", `${width}px`);
   }
 
   function getCursorRect() {
-    const selectors = [".kix-cursor", ".docs-text-ui-cursor-blink", "[class*='cursor'][style*='left']"];
+    const selection = document.getSelection();
+    if (selection?.rangeCount && selection.isCollapsed &&
+        selection.anchorNode?.parentElement?.closest(".kix-appview-editor, #editor[contenteditable='true']")) {
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      if (rect.height > 0) return rect;
+    }
+    const selectors = [".kix-cursor-caret", ".docs-text-ui-cursor-blink", ".kix-cursor"];
     for (const selector of selectors) {
       const elements = Array.from(document.querySelectorAll(selector));
-      const cursor = elements.reverse().find((element) => {
+      const cursor = elements.find((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.height > 5 && rect.left >= 0 && rect.top >= 0;
+        const owner = element.closest(".kix-cursor");
+        const name = owner?.querySelector(".kix-cursor-name");
+        if (name?.textContent.trim()) return false;
+        return rect.height > 5 && rect.left >= 0 && rect.top >= 0 &&
+          rect.left < window.innerWidth && rect.top < window.innerHeight &&
+          getComputedStyle(element).display !== "none";
       });
       if (cursor) return cursor.getBoundingClientRect();
     }
@@ -250,25 +289,57 @@
       label.textContent = command.label;
       const hint = document.createElement("small");
       hint.textContent = command.hint;
-      button.title = command.hint;
+      button.setAttribute("aria-label", `${command.label} — ${command.hint}`);
       copy.append(label, hint);
       button.append(icon, copy);
-      button.addEventListener("pointerenter", () => {
+      button.addEventListener("pointermove", () => {
         if (selectedIndex !== index) {
           selectedIndex = index;
-          render();
+          results.querySelectorAll(".command").forEach((row, rowIndex) => {
+            row.classList.toggle("selected", rowIndex === index);
+            row.setAttribute("aria-selected", String(rowIndex === index));
+          });
         }
       });
       button.addEventListener("mousedown", (event) => event.preventDefault());
-      button.addEventListener("click", () => { closePalette(); executeCommand(command); });
+      button.addEventListener("click", () => {
+        if (!paletteOpen) return;
+        closePalette();
+        executeCommand(command);
+      });
       results.appendChild(button);
     });
     results.querySelector(".selected")?.scrollIntoView({ block: "nearest" });
+    if (/^(table|tableau)$/.test(query.trim().toLowerCase())) {
+      const chooser = document.createElement("div");
+      chooser.className = "table-chooser";
+      const caption = document.createElement("div");
+      caption.textContent = "Colonnes × lignes · ou tape tableau 4x5";
+      const grid = document.createElement("div");
+      grid.className = "table-grid";
+      for (let rows = 1; rows <= 5; rows++) {
+        for (let columns = 1; columns <= 5; columns++) {
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.setAttribute("aria-label", `${columns} colonnes, ${rows} lignes`);
+          cell.textContent = `${columns}×${rows}`;
+          cell.addEventListener("mousedown", event => event.preventDefault());
+          cell.addEventListener("click", () => {
+            if (!paletteOpen) return;
+            closePalette();
+            executeCommand({ id: "table", label: `Tableau ${columns} × ${rows}`, dimensions: { columns, rows } });
+          });
+          grid.appendChild(cell);
+        }
+      }
+      chooser.append(caption, grid);
+      results.appendChild(chooser);
+    }
   }
 
   async function executeCommand(command) {
     try {
-      const message = await adapter.execute(command.id);
+      const message = await adapter.execute(command.id, command.dimensions);
       showToast(message || `${command.label} appliqué`, "success");
     } catch (error) {
       console.warn("[Slash Docs]", error);
@@ -277,12 +348,21 @@
   }
 
   function showToast(message, state) {
+    // Notifications must never remount the closed command palette.
+    const notificationHost = document.createElement("div");
+    notificationHost.style.setProperty("pointer-events", "none", "important");
+    const notificationRoot = notificationHost.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = getPaletteStyles();
     const toast = document.createElement("div");
+    toast.setAttribute("role", "status");
+    toast.style.pointerEvents = "none";
     toast.className = `toast ${state}`;
     toast.textContent = message;
-    shadow.appendChild(toast);
+    notificationRoot.append(style, toast);
+    document.documentElement.appendChild(notificationHost);
     requestAnimationFrame(() => toast.classList.add("show"));
-    setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 180); }, 2200);
+    setTimeout(() => { toast.classList.remove("show"); setTimeout(() => notificationHost.remove(), 180); }, 2200);
   }
 
   function iconSvg(icon) {
@@ -312,6 +392,10 @@
   function getPaletteStyles() {
     return `
       :host { all: initial; }
+      .table-chooser { padding: 12px; color: #5f6368; font: 12px/1.4 Roboto,Arial,sans-serif; }
+      .table-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 4px; margin-top: 8px; }
+      .table-grid button { min-height: 32px; border: 1px solid #dadce0; background: #fff; color: #3c4043; border-radius: 3px; cursor: pointer; }
+      .table-grid button:hover, .table-grid button:focus-visible { background: #e8f0fe; outline: 2px solid #1a73e8; }
       .palette { position: fixed; left: var(--slash-left); top: var(--slash-top); width: var(--slash-width); z-index: 2147483647; overflow: hidden; color: #202124; background: #fff; border: 1px solid #dadce0; border-radius: 4px; box-shadow: 0 2px 6px 2px rgba(60,64,67,.15); font: 14px/1.2 Roboto,Arial,sans-serif; opacity: 0; transform: translateY(-3px); transform-origin: 24px 0; transition: opacity 100ms ease-out, transform 120ms ease-out; pointer-events: auto; }
       .palette.visible { opacity: 1; transform: none; }
       .menu-heading { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; color: #3c4043; background: #fff; border-bottom: 1px solid #dadce0; }

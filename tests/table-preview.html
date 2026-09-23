@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<style>
+.goog-dimension-picker {position:relative;width:180px;height:180px;font-size:18px}
+.goog-dimension-picker-mousecatcher {position:absolute;width:180px;height:180px;font-size:18px}
+.goog-dimension-picker-highlighted {width:1em;height:1em}
+[hidden] {display:none!important}
+</style>
+<button id="docs-insert-menu">Insertion</button>
+<div role="menuitem" hidden>Tableau</div>
+<div class="goog-dimension-picker" hidden>
+  <div class="goog-dimension-picker-highlighted"></div>
+  <div class="goog-dimension-picker-mousecatcher"></div>
+</div>
+<script src="../src/docs-adapter.js"></script>
+<script>
+const menu = document.querySelector('[role="menuitem"]');
+const picker = document.querySelector('.goog-dimension-picker');
+const highlight = document.querySelector('.goog-dimension-picker-highlighted');
+const catcher = document.querySelector('.goog-dimension-picker-mousecatcher');
+document.querySelector('button').onclick = () => setTimeout(() => menu.hidden = false, 180);
+menu.onclick = () => setTimeout(() => picker.hidden = false, 180);
+let columns = 1, rows = 1, insertions = 0;
+catcher.onmousemove = event => {
+  columns = Math.ceil(event.offsetX / 18);
+  rows = Math.ceil(event.offsetY / 18);
+  highlight.style.width = columns + 'em';
+  highlight.style.height = rows + 'em';
+};
+catcher.onmouseup = () => {insertions++;};
+const dimensions = new URLSearchParams(location.search).has('custom') ? {columns:4, rows:5} : {columns:3, rows:3};
+SlashDocsAdapter.createDocsAdapter(document).execute('table', dimensions).then(() => {
+  document.body.dataset.tablePassed = String(columns === dimensions.columns && rows === dimensions.rows && insertions === 1);
+}).catch(error => {document.body.dataset.error = error.message;});
+</script>
+</html>

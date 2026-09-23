@@ -7,6 +7,15 @@
 
   const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+  async function waitFor(find) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const element = find();
+      if (element) return element;
+      await wait(50);
+    }
+    return null;
+  }
+
   function visible(element) {
     if (!element) return false;
     const rect = element.getBoundingClientRect();
@@ -101,7 +110,7 @@
 
   async function openInsertChoice(doc, labels, message) {
     await openInsertMenu(doc);
-    const item = findVisibleMenuItem(doc, labels);
+    const item = await waitFor(() => findVisibleMenuItem(doc, labels));
     if (!item) throw new Error(`L’option ${labels[0]} est introuvable dans le menu Insertion.`);
     mouseClick(item);
     return message;
@@ -109,6 +118,34 @@
 
   async function insertHorizontalLine(doc) {
     await openInsertChoice(doc, ["horizontal line", "ligne horizontale"]);
+  }
+
+  async function insertTable(doc, { columns = 3, rows = 3 } = {}) {
+    if (![columns, rows].every(n => Number.isInteger(n) && n >= 1 && n <= 20)) throw new Error("Dimensions attendues : 1 à 20.");
+    await openInsertChoice(doc, ["table", "tableau"]);
+    const picker = await waitFor(() => Array.from(doc.querySelectorAll(".goog-dimension-picker")).find(visible));
+    const catcher = picker?.querySelector(".goog-dimension-picker-mousecatcher");
+    const highlight = picker?.querySelector(".goog-dimension-picker-highlighted");
+    if (!catcher || !highlight) {
+      throw new Error(`Sélection automatique indisponible : choisis ${columns} × ${rows} dans la grille Google Docs ouverte.`);
+    }
+    const rect = catcher.getBoundingClientRect();
+    const unit = parseFloat(doc.defaultView.getComputedStyle(catcher).fontSize);
+    const point = { clientX: rect.left + unit * (columns - 0.5), clientY: rect.top + unit * (rows - 0.5) };
+    const send = type => catcher.dispatchEvent(new doc.defaultView.MouseEvent(type, {
+      bubbles: true, cancelable: true, view: doc.defaultView, ...point
+    }));
+    send("mouseover");
+    send("mousemove");
+    // Verify native dimensions before confirming insertion.
+    const confirmed = await waitFor(() => {
+      const size = highlight.getBoundingClientRect();
+      return Math.abs(size.width - unit * columns) < 2 && Math.abs(size.height - unit * rows) < 2;
+    });
+    if (!confirmed) throw new Error(`Choisis ${columns} × ${rows} dans la grille : ses dimensions n’ont pas pu être vérifiées automatiquement.`);
+    send("mousedown");
+    send("mouseup");
+    send("click");
   }
 
   async function insertPageBreak(doc) {
@@ -160,7 +197,7 @@
 
   function createDocsAdapter(doc) {
     return {
-      async execute(commandId) {
+      async execute(commandId, dimensions) {
         const actions = {
           normal: () => applyParagraphStyle(doc, ["normal text", "texte normal"]),
           title: () => applyParagraphStyle(doc, ["title", "titre"]),
@@ -168,7 +205,7 @@
           heading1: () => applyParagraphStyle(doc, ["heading 1", "titre 1"]),
           heading2: () => applyParagraphStyle(doc, ["heading 2", "titre 2"]),
           heading3: () => applyParagraphStyle(doc, ["heading 3", "titre 3"]),
-          table: () => openInsertChoice(doc, ["table", "tableau"], "Choisis la taille du tableau dans le menu Docs"),
+          table: () => insertTable(doc, dimensions),
           image: () => openInsertChoice(doc, ["image"], "Choisis la source de l’image dans le menu Docs"),
           link: () => clickToolbar(doc, ["insertLinkButton"], ["insert link", "insérer un lien", "lien"]),
           divider: () => insertHorizontalLine(doc),
@@ -183,7 +220,8 @@
         };
         const action = actions[commandId];
         if (!action) throw new Error(`Commande inconnue : ${commandId}`);
-        return action();
+        const result = await action();
+        return typeof result === "string" ? result : undefined;
       }
     };
   }

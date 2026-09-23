@@ -12,6 +12,8 @@ Une extension Chrome légère qui ajoute une palette de commandes `/` à Google 
 
 Dans le document, tape `/`, recherche une commande, puis valide avec `Entrée`.
 
+`/tableau 4x5` insère 4 colonnes et 5 lignes (1 à 20 par dimension). `/tableau` propose aussi une grille de choix jusqu’à 5 × 5 ; Entrée conserve le défaut 3 × 3. La recherche reconnaît les alias français/anglais et les petites fautes.
+
 ## Commandes disponibles
 
 - Texte normal, titre et sous-titre
@@ -35,7 +37,7 @@ npm run check
 
 La couche spécifique à l’interface de Google Docs est isolée dans `src/docs-adapter.js`. Si Google renomme un bouton ou un sélecteur, les ajustements restent localisés dans ce fichier.
 
-Les commandes **Tableau** et **Image** ouvrent le sélecteur natif de Google Docs afin de choisir respectivement les dimensions ou la source.
+**Tableau 3 × 3** utilise la grille native et confirme les dimensions avant de cliquer. Si la grille n’est pas reconnue, un message invite à choisir les dimensions manuellement. **Image** ouvre le choix de source natif.
 
 ## Vie privée
 

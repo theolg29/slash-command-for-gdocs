@@ -26,3 +26,17 @@ test("les alias courts retrouvent les titres", () => {
 test("une recherche inconnue renvoie une liste vide", () => {
   assert.deepEqual(filterCommands("xyz-introuvable"), []);
 });
+
+test("les dimensions sont interprétées comme colonnes × lignes et bornées", () => {
+  assert.deepEqual(filterCommands("tableau 4x5")[0].dimensions, {columns: 4, rows: 5});
+  assert.deepEqual(filterCommands("table 2 × 7")[0].dimensions, {columns: 2, rows: 7});
+  assert.deepEqual(filterCommands("tableau 0x3"), []);
+  assert.deepEqual(filterCommands("tableau 21x3"), []);
+});
+
+test("la recherche accepte fautes, transpositions et plusieurs mots", () => {
+  assert.equal(filterCommands("tabelau")[0].id, "table");
+  assert.equal(filterCommands("chekbox")[0].id, "checklist");
+  assert.equal(filterCommands("titre 2")[0].id, "heading2");
+  assert.equal(filterCommands("liste numerote")[0].id, "numbered");
+});

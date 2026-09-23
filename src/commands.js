@@ -12,7 +12,7 @@
     { id: "heading1", label: "Titre 1", hint: "Créer une grande section", keywords: "h1 heading titre 1", icon: "h1", group: "Texte" },
     { id: "heading2", label: "Titre 2", hint: "Créer une section moyenne", keywords: "h2 heading titre 2", icon: "h2", group: "Texte" },
     { id: "heading3", label: "Titre 3", hint: "Créer une petite section", keywords: "h3 heading titre 3", icon: "h3", group: "Texte" },
-    { id: "table", label: "Tableau", hint: "Choisir le nombre de lignes et colonnes", keywords: "table tableau grille cellules", icon: "table", group: "Insertion" },
+    { id: "table", label: "Tableau 3 × 3", hint: "Insérer trois lignes et trois colonnes", keywords: "table tableau grille cellules 3x3", icon: "table", group: "Insertion" },
     { id: "image", label: "Image", hint: "Importer ou choisir une image", keywords: "image photo illustration upload importer", icon: "image", group: "Insertion" },
     { id: "link", label: "Lien", hint: "Ajouter un lien au texte", keywords: "link lien url hyperlien", icon: "link", group: "Insertion" },
     { id: "divider", label: "Ligne horizontale", hint: "Séparer deux parties du document", keywords: "divider séparateur ligne horizontale rule", icon: "divider", group: "Insertion" },
@@ -43,10 +43,36 @@
     if (label.startsWith(query)) return 80;
     if (haystack.split(/\s+/).some((word) => word.startsWith(query))) return 60;
     if (haystack.includes(query)) return 40;
+    const words = haystack.split(/\s+/);
+    if (query.split(/\s+/).every(token => words.some(word =>
+      word.startsWith(token) || (token.length >= 3 && distance(token, word) <= (token.length >= 7 ? 2 : 1))
+    ))) return 20;
     return 0;
   }
 
+  function distance(a, b) {
+    const rows = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 0; j <= b.length; j++) rows[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        rows[i][j] = Math.min(rows[i-1][j]+1, rows[i][j-1]+1, rows[i-1][j-1]+(a[i-1] === b[j-1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]) {
+          rows[i][j] = Math.min(rows[i][j], rows[i-2][j-2]+1);
+        }
+      }
+    }
+    return rows[a.length][b.length];
+  }
+
   function filterCommands(query) {
+    const table = normalize(query).match(/^(?:tableau|table)\s+(\d+)\s*[x×]\s*(\d+)$/);
+    if (table) {
+      const columns = Number(table[1]), rows = Number(table[2]);
+      if (columns < 1 || columns > 20 || rows < 1 || rows > 20) return [];
+      return [{ ...COMMANDS.find(command => command.id === "table"),
+        label: `Tableau ${columns} × ${rows}`, hint: `${columns} colonnes et ${rows} lignes`,
+        dimensions: { columns, rows } }];
+    }
     return COMMANDS
       .map((command, index) => ({ command, index, score: score(command, query) }))
       .filter((entry) => entry.score > 0)

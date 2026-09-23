@@ -25,23 +25,55 @@
   <body>
     <main class="page"><div id="editor" contenteditable="true"></div></main>
     <script>
-      window.addEventListener("DOMContentLoaded", () => {
+      window.addEventListener("DOMContentLoaded", async () => {
+        const action = new URLSearchParams(location.search).get("action");
+        let executions = 0;
+        if (action === "select" || action === "keyboard") {
+          window.SlashDocsAdapter.createDocsAdapter = () => ({ execute: async () => { executions += 1; } });
+        }
         const editor = document.getElementById("editor");
         editor.focus();
+        if (action === "anchor" || action === "anchor-low") {
+          const caret = document.createElement("div");
+          caret.className = "kix-cursor-caret";
+          caret.style.cssText = "position:fixed;left:110px;top:120px;width:1px;height:20px";
+          if (action === "anchor-low") caret.style.top = "440px";
+          document.body.appendChild(caret);
+        }
         editor.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
-        const action = new URLSearchParams(location.search).get("action");
+        if (action === "anchor" || action === "anchor-low") {
+          const host = document.getElementById("slash-docs-root");
+          document.body.dataset.anchorPassed = String(host.style.getPropertyValue("--slash-left") === "110px" && host.style.getPropertyValue("--slash-top") === (action === "anchor-low" ? "466px" : "146px"));
+        }
         if (action === "arrow") {
           editor.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
         }
         if (action === "close") {
           editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
           const host = document.getElementById("slash-docs-root");
-          document.body.dataset.paletteClosed = String(host.hidden && getComputedStyle(host).display === "none");
+          document.body.dataset.paletteClosed = String(host === null);
+          document.body.dataset.slashPreserved = String(editor.textContent === "/");
         }
         if (action === "outside") {
           editor.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
           const host = document.getElementById("slash-docs-root");
-          document.body.dataset.outsideClosed = String(host.hidden && getComputedStyle(host).display === "none");
+          document.body.dataset.outsideClosed = String(host === null);
+        }
+        if (action === "select" || action === "keyboard") {
+          const host = document.getElementById("slash-docs-root");
+          const oldButton = host.shadowRoot.querySelector(".command");
+          if (action === "select") oldButton.click();
+          else editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const detached = !host.isConnected && host.shadowRoot.querySelectorAll(".command").length === 0;
+          oldButton.click();
+          const arrow = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+          editor.dispatchEvent(arrow);
+          const released = !arrow.defaultPrevented;
+          editor.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+          const reopened = host.isConnected && host.shadowRoot.querySelectorAll(".command").length > 0;
+          editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+          document.body.dataset.selectionPassed = String(detached && released && reopened && executions === 1 && !host.isConnected);
         }
       });
     </script>
