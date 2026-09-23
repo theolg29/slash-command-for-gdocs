@@ -116,8 +116,9 @@
     <style>${getPaletteStyles()}</style>
     <section class="palette" role="dialog" aria-label="Commandes Slash Docs">
       <header class="menu-heading">
-        <span class="category-title">Commandes</span>
-        <span class="query-display" aria-label="Recherche en cours">/<span class="query-text"></span><span class="caret"></span></span>
+        <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg></span>
+        <span class="query-display" aria-label="Recherche en cours"><span class="query-placeholder">Rechercher dans les menus</span><span class="query-value">/<span class="query-text"></span><span class="caret"></span></span></span>
+        <kbd>Échap</kbd>
       </header>
       <div class="results" role="listbox" aria-label="Commandes disponibles"></div>
     </section>`;
@@ -125,7 +126,8 @@
   const palette = shadow.querySelector(".palette");
   const results = shadow.querySelector(".results");
   const queryText = shadow.querySelector(".query-text");
-  const categoryTitle = shadow.querySelector(".category-title");
+  const queryPlaceholder = shadow.querySelector(".query-placeholder");
+  const queryValue = shadow.querySelector(".query-value");
   let filtered = SlashDocsCommands.COMMANDS;
   let adapter;
 
@@ -177,10 +179,10 @@
 
   function positionPalette(point) {
     const anchor = getCursorRect() || (point ? { left: point.x, bottom: point.y } : null) || { left: window.innerWidth / 2, bottom: 180 };
-    const width = Math.min(372, window.innerWidth - 24);
+    const width = Math.min(340, window.innerWidth - 24);
     const left = Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12));
     let top = anchor.bottom + 14;
-    if (top + 420 > window.innerHeight) top = Math.max(12, anchor.bottom - 420);
+    if (top + 470 > window.innerHeight) top = Math.max(12, anchor.bottom - 470);
     host.style.setProperty("--slash-left", `${left}px`);
     host.style.setProperty("--slash-top", `${top}px`);
     host.style.setProperty("--slash-width", `${width}px`);
@@ -201,7 +203,8 @@
 
   function render() {
     queryText.textContent = query;
-    categoryTitle.textContent = query ? "Résultats" : "Commandes";
+    queryPlaceholder.hidden = Boolean(query);
+    queryValue.hidden = !query;
     results.replaceChildren();
     if (!filtered.length) {
       const empty = document.createElement("div");
@@ -213,10 +216,12 @@
     let previousGroup = null;
     filtered.forEach((command, index) => {
       if (!query && command.group !== previousGroup) {
-        const groupTitle = document.createElement("div");
-        groupTitle.className = "group-title";
-        groupTitle.textContent = command.group;
-        results.appendChild(groupTitle);
+        if (previousGroup !== null) {
+          const separator = document.createElement("div");
+          separator.className = "group-separator";
+          separator.setAttribute("role", "separator");
+          results.appendChild(separator);
+        }
         previousGroup = command.group;
       }
       const button = document.createElement("button");
@@ -234,6 +239,7 @@
       label.textContent = command.label;
       const hint = document.createElement("small");
       hint.textContent = command.hint;
+      button.title = command.hint;
       copy.append(label, hint);
       button.append(icon, copy);
       button.addEventListener("pointerenter", () => {
@@ -295,26 +301,29 @@
   function getPaletteStyles() {
     return `
       :host { all: initial; }
-      .palette { position: fixed; left: var(--slash-left); top: var(--slash-top); width: var(--slash-width); z-index: 2147483647; overflow: hidden; color: #202124; background: #fff; border: 1px solid #dadce0; border-radius: 8px; box-shadow: 0 8px 24px rgba(60,64,67,.18), 0 2px 6px rgba(60,64,67,.12); font: 13px/1.35 Roboto,Arial,sans-serif; opacity: 0; transform: translateY(-4px) scale(.99); transform-origin: 24px 0; transition: opacity 120ms ease-out, transform 150ms ease-out; pointer-events: auto; }
+      .palette { position: fixed; left: var(--slash-left); top: var(--slash-top); width: var(--slash-width); z-index: 2147483647; overflow: hidden; color: #202124; background: #fff; border: 1px solid #dadce0; border-radius: 4px; box-shadow: 0 2px 6px 2px rgba(60,64,67,.15); font: 14px/1.2 Roboto,Arial,sans-serif; opacity: 0; transform: translateY(-3px); transform-origin: 24px 0; transition: opacity 100ms ease-out, transform 120ms ease-out; pointer-events: auto; }
       .palette.visible { opacity: 1; transform: none; }
-      .menu-heading { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 14px; color: #3c4043; background: #f8fafd; border-bottom: 1px solid #e8eaed; font-size: 12px; font-weight: 500; }
-      .group-title { display: flex; align-items: center; min-height: 28px; padding: 4px 14px 0; color: #5f6368; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
-      .group-title:not(:first-child) { margin-top: 4px; border-top: 1px solid #e8eaed; }
-      .query-display { max-width: 170px; overflow: hidden; padding: 4px 8px; color: #5f6368; background: #fff; border: 1px solid #dadce0; border-radius: 4px; font: 500 12px/1.2 Roboto,Arial,sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+      .menu-heading { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; color: #3c4043; background: #fff; border-bottom: 1px solid #dadce0; }
+      .search-icon { display: grid; place-items: center; width: 24px; height: 24px; color: #5f6368; }
+      .search-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+      .query-display { min-width: 0; overflow: hidden; color: #202124; font: 400 14px/1.2 Roboto,Arial,sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+      .query-placeholder { color: #5f6368; }
+      .query-value[hidden], .query-placeholder[hidden] { display: none; }
+      kbd { padding: 3px 5px; color: #5f6368; background: #f8f9fa; border: 1px solid #dadce0; border-radius: 3px; font: 10px/1 Roboto,Arial,sans-serif; }
       .caret { display: inline-block; width: 1px; height: 13px; margin-left: 1px; vertical-align: -2px; background: #1a73e8; animation: blink 1s step-end infinite; }
-      .results { max-height: 400px; padding: 4px 0 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #dadce0 transparent; }
-      .command { width: calc(100% - 8px); display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 8px; min-height: 50px; margin: 0 4px; padding: 5px 10px; color: inherit; background: transparent; border: 0; border-radius: 4px; font: inherit; text-align: left; cursor: pointer; transition: background 100ms ease, color 100ms ease; }
+      .results { max-height: 408px; padding: 6px 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #dadce0 transparent; }
+      .group-separator { height: 1px; margin: 6px 0; background: #dadce0; }
+      .command { width: 100%; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; color: inherit; background: transparent; border: 0; border-radius: 0; font: inherit; text-align: left; cursor: pointer; transition: background 80ms ease; }
       .command:hover { background: #f1f3f4; }
-      .command.selected { color: #174ea6; background: #e8f0fe; }
-      .command:active { background: #d2e3fc; }
+      .command.selected { color: #202124; background: #e8eaed; }
+      .command:active { background: #dadce0; }
       .command:focus-visible { outline: 2px solid #1a73e8; outline-offset: -2px; }
-      .command-icon { display: grid; place-items: center; width: 28px; height: 28px; color: #5f6368; }
-      .command.selected .command-icon { color: #1967d2; }
-      .command-icon svg { width: 21px; height: 21px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      .command-copy { min-width: 0; display: flex; flex-direction: column; }
-      .command-copy strong { overflow: hidden; color: inherit; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-      .command-copy small { overflow: hidden; margin-top: 2px; color: #5f6368; font-size: 11px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-      .command.selected .command-copy small { color: #3c6eaf; }
+      .command-icon { display: grid; place-items: center; width: 24px; height: 24px; color: #5f6368; }
+      .command.selected .command-icon { color: #3c4043; }
+      .command-icon svg { width: 19px; height: 19px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .command-copy { min-width: 0; display: block; }
+      .command-copy strong { display: block; overflow: hidden; color: inherit; font-size: 14px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+      .command-copy small { display: none; }
       .empty { display: flex; min-height: 112px; flex-direction: column; align-items: center; justify-content: center; color: #3c4043; } .empty small { margin-top: 4px; color: #5f6368; }
       .toast { position: fixed; right: 22px; bottom: 22px; z-index: 2147483647; max-width: 360px; padding: 11px 14px; color: #fff; background: #3c4043; border-radius: 4px; box-shadow: 0 4px 12px rgba(60,64,67,.24); font: 500 12px/1.4 Roboto,Arial,sans-serif; opacity: 0; transform: translateY(6px); transition: opacity 120ms ease, transform 150ms ease; }
       .toast.error { background: #b3261e; } .toast.show { opacity: 1; transform: none; }
